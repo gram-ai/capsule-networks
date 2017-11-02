@@ -23,26 +23,7 @@ __Note__: Affine-transformations for the data augmentation stage have not been i
 
 ## Usage
 
-**Step 1** Configure network architecture to your preferences inside `capsule_network.py`.
-
-```python
-self.conv1 = nn.Conv2d(in_channels=1, out_channels=256, kernel_size=9, stride=1)
-
-self.primary_capsules = CapsuleLayer(num_capsules=8, num_route_nodes=-1, in_channels=256, out_channels=32, kernel_size=9, stride=2)
-
-self.digit_capsules = CapsuleLayer(num_capsules=10, num_route_nodes=32 * 6 * 6, in_channels=8, out_channels=16)
-
-self.decoder = nn.Sequential(
-	nn.Linear(16, 512),
-	nn.ReLU(inplace=True),
-	nn.Linear(512, 1024),
-	nn.ReLU(inplace=True),
-	nn.Linear(1024, 784),
-	nn.Sigmoid()
-)
-```
-
-**Step 2** Adjust the number of training epochs, batch sizes, etc. inside `capsule_network.py`.
+**Step 1** Adjust the number of training epochs, batch sizes, etc. inside `capsule_network.py`.
 
 ```python
 BATCH_SIZE = 100
@@ -51,7 +32,7 @@ NUM_EPOCHS = 30
 NUM_ROUTING_ITERATIONS = 3
 ```
 
-**Step 3** Start training. The MNIST dataset will be downloaded if you do not already have it in the same directory the script is run in. Make sure to have Visdom Server running!
+**Step 2** Start training. The MNIST dataset will be downloaded if you do not already have it in the same directory the script is run in. Make sure to have Visdom Server running!
 
 ```console
 $ sudo python3 -m visdom.server & python3 capsule_network.py
@@ -59,9 +40,9 @@ $ sudo python3 -m visdom.server & python3 capsule_network.py
 
 ## Benchmarks
 
-Haven't fully benchmarked the entire model yet; not enough computing power available. Accuracy so far at the time of writing (7th epoch) is capped at 99.28%.
+Highest accuracy was 99.39%. It appears that the decoders loss overcomes the margin loss over time. There may be problems with the loss (?), as the graphs from other implementations appears to have a different scale in terms of loss value.
 
-![Training progress.](media/Progress.png)
+![Training progress.](media/Visdom.png)
 
 Default PyTorch Adam optimizer hyperparameters were used with no learning rate scheduling. Epochs with batch size of 100 takes ~3 minutes on a Razer Blade w/ GTX 1050. 
 

@@ -32,7 +32,6 @@ class CapsuleLayer(nn.Module):
         self.num_capsules = num_capsules
 
         if num_route_nodes != -1:
-            self.route_logits = nn.Parameter(torch.zeros(num_capsules, 1, num_route_nodes, 1, 1))
             self.route_weights = nn.Parameter(torch.randn(num_capsules, num_route_nodes, in_channels, out_channels))
         else:
             self.capsules = nn.ModuleList(
@@ -48,7 +47,7 @@ class CapsuleLayer(nn.Module):
         if self.num_route_nodes != -1:
             priors = x[None, :, :, None, :] @ self.route_weights[:, None, :, :, :]
 
-            logits = self.route_logits
+            logits = Variable(torch.zeros(*priors.size())).cuda()
             for i in range(self.num_iterations):
                 probs = softmax(logits, dim=2)
                 outputs = self.squash((probs * priors).sum(dim=2, keepdim=True))
@@ -119,13 +118,13 @@ class CapsuleLoss(nn.Module):
         margin_loss = margin_loss.sum(dim=1).mean()
 
         reconstruction_loss = self.reconstruction_loss(reconstructions, images)
+
         return margin_loss + 0.0005 * reconstruction_loss
 
 
 if __name__ == "__main__":
     from torch.autograd import Variable
     from torch.optim import Adam
-    from torch.optim.lr_scheduler import ReduceLROnPlateau
     from torchnet.engine import Engine
     from torchnet.logger import VisdomPlotLogger, VisdomLogger
     from torchvision.utils import make_grid
@@ -137,7 +136,6 @@ if __name__ == "__main__":
     model.cuda()
 
     optimizer = Adam(model.parameters())
-    scheduler = ReduceLROnPlateau(optimizer, 'max', patience=3)
 
     engine = Engine()
     meter_loss = tnt.meter.AverageValueMeter()
@@ -219,8 +217,6 @@ if __name__ == "__main__":
 
         print('[Epoch %d] Testing Loss: %.4f (Accuracy: %.2f%%)' % (
             state['epoch'], meter_loss.value()[0], meter_accuracy.value()[0]))
-
-        scheduler.step(meter_accuracy.value()[0], state['epoch'])
 
         torch.save(model.state_dict(), 'epochs/epoch_%d.pt' % state['epoch'])
 

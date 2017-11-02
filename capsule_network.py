@@ -9,24 +9,21 @@ import torch
 import torch.nn.functional as F
 from torch import nn
 
+BATCH_SIZE = 100
+NUM_CLASSES = 10
+NUM_EPOCHS = 30
+NUM_ROUTING_ITERATIONS = 3
+
 
 def softmax(input, dim=1):
-    input_size = input.size()
-
-    trans_input = input.transpose(dim, len(input_size) - 1)
-    trans_size = trans_input.size()
-
-    input_2d = trans_input.contiguous().view(-1, trans_size[-1])
-
-    soft_max_2d = F.softmax(input_2d)
-
-    soft_max_nd = soft_max_2d.view(*trans_size)
-    return soft_max_nd.transpose(dim, len(input_size) - 1)
+    transposed_input = input.transpose(dim, len(input.size()) - 1)
+    softmaxed_output = F.softmax(transposed_input.contiguous().view(-1, transposed_input.size(-1)))
+    return softmaxed_output.view(*transposed_input.size()).transpose(dim, len(input.size()) - 1)
 
 
 class CapsuleLayer(nn.Module):
     def __init__(self, num_capsules, num_route_nodes, in_channels, out_channels, kernel_size=None, stride=None,
-                 num_iterations=3):
+                 num_iterations=NUM_ROUTING_ITERATIONS):
         super(CapsuleLayer, self).__init__()
 
         self.num_route_nodes = num_route_nodes
@@ -74,7 +71,7 @@ class CapsuleNet(nn.Module):
         self.conv1 = nn.Conv2d(in_channels=1, out_channels=256, kernel_size=9, stride=1)
         self.primary_capsules = CapsuleLayer(num_capsules=8, num_route_nodes=-1, in_channels=256, out_channels=32,
                                              kernel_size=9, stride=2)
-        self.digit_capsules = CapsuleLayer(num_capsules=10, num_route_nodes=32 * 6 * 6, in_channels=8, out_channels=16)
+        self.digit_capsules = CapsuleLayer(num_capsules=NUM_CLASSES, num_route_nodes=32 * 6 * 6, in_channels=8, out_channels=16)
 
         self.decoder = nn.Sequential(
             nn.Linear(16, 512),
@@ -120,6 +117,7 @@ if __name__ == "__main__":
     from torch.autograd import Variable
     from torch.optim import Adam
     from torchnet.engine import Engine
+    from torchnet.logger import VisdomPlotLogger, VisdomLogger
     from torchvision.datasets.mnist import MNIST
     from tqdm import tqdm
     import torchnet as tnt
@@ -132,8 +130,18 @@ if __name__ == "__main__":
     engine = Engine()
     meter_loss = tnt.meter.AverageValueMeter()
     class_error = tnt.meter.ClassErrorMeter(accuracy=True)
+    confusion_meter = tnt.meter.ConfusionMeter(NUM_CLASSES, normalized=True)
+
+    train_loss_logger = VisdomPlotLogger('line', opts={'title': 'Train Loss'})
+    train_error_logger = VisdomPlotLogger('line', opts={'title': 'Train Class Error'})
+    test_loss_logger = VisdomPlotLogger('line', opts={'title': 'Test Loss'})
+    test_error_logger = VisdomPlotLogger('line', opts={'title': 'Test Class Error'})
+    confusion_logger = VisdomLogger('heatmap', opts={'title': 'Confusion matrix',
+                                                     'columnnames': list(range(NUM_CLASSES)),
+                                                     'rownames': list(range(NUM_CLASSES))})
 
     capsule_loss = CapsuleLoss()
+
 
     def get_iterator(mode):
         dataset = MNIST(root='./data', download=True, train=mode)
@@ -141,13 +149,14 @@ if __name__ == "__main__":
         labels = getattr(dataset, 'train_labels' if mode else 'test_labels')
         tensor_dataset = tnt.dataset.TensorDataset([data, labels])
 
-        return tensor_dataset.parallel(batch_size=100, num_workers=4, shuffle=mode)
+        return tensor_dataset.parallel(batch_size=BATCH_SIZE, num_workers=4, shuffle=mode)
 
-    def h(sample):
+
+    def processor(sample):
         data = sample[0].unsqueeze(1).float() / 255.0
         labels = torch.LongTensor(sample[1])
 
-        labels = torch.sparse.torch.eye(10).index_select(dim=0, index=labels)
+        labels = torch.sparse.torch.eye(NUM_CLASSES).index_select(dim=0, index=labels)
 
         data = Variable(data).cuda()
         labels = Variable(labels).cuda()
@@ -162,6 +171,7 @@ if __name__ == "__main__":
     def reset_meters():
         class_error.reset()
         meter_loss.reset()
+        confusion_meter.reset()
 
 
     def on_sample(state):
@@ -170,6 +180,7 @@ if __name__ == "__main__":
 
     def on_forward(state):
         class_error.add(state['output'].data, torch.LongTensor(state['sample'][1]))
+        confusion_meter.add(state['output'].data, torch.LongTensor(state['sample'][1]))
         meter_loss.add(state['loss'].data[0])
 
 
@@ -179,15 +190,23 @@ if __name__ == "__main__":
 
 
     def on_end_epoch(state):
-        print('Training loss: %.4f, accuracy: %.2f%%' % (meter_loss.value()[0], class_error.value()[0]))
+        print('[Epoch %d] Training Loss: %.4f (Accuracy: %.2f%%)' % (state['epoch'], meter_loss.value()[0], class_error.value()[0]))
+
+        train_loss_logger.log(state['epoch'], meter_loss.value()[0])
+        train_error_logger.log(state['epoch'], class_error.value()[0])
 
         reset_meters()
-        engine.test(h, get_iterator(False))
-        print('Testing loss: %.4f, accuracy: %.2f%%' % (meter_loss.value()[0], class_error.value()[0]))
+        engine.test(processor, get_iterator(False))
+        test_loss_logger.log(state['epoch'], meter_loss.value()[0])
+        test_error_logger.log(state['epoch'], class_error.value()[0])
+        confusion_logger.log(confusion_meter.value())
+
+        print('[Epoch %d] Testing Loss: %.4f (Accuracy: %.2f%%)' % (state['epoch'], meter_loss.value()[0], class_error.value()[0]))
 
 
     engine.hooks['on_sample'] = on_sample
     engine.hooks['on_forward'] = on_forward
     engine.hooks['on_start_epoch'] = on_start_epoch
     engine.hooks['on_end_epoch'] = on_end_epoch
-    engine.train(h, get_iterator(True), maxepoch=30, optimizer=optimizer)
+
+    engine.train(processor, get_iterator(True), maxepoch=NUM_EPOCHS, optimizer=optimizer)

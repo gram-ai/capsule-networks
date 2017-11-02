@@ -19,6 +19,7 @@ __Note__: Affine-transformations for the data augmentation stage have not been i
 * TorchVision
 * TorchNet
 * TQDM
+* Visdom
 
 ## Usage
 
@@ -57,10 +58,10 @@ def get_iterator(mode):
 	return tensor_dataset.parallel(batch_size=100, num_workers=4, shuffle=mode)
 ```
 
-**Step 3** Start training. The MNIST dataset will be downloaded if you do not already have it in the same directory the script is run in.
+**Step 3** Start training. The MNIST dataset will be downloaded if you do not already have it in the same directory the script is run in. Make sure to have Visdom Server running!
 
 ```console
-$ python3 capsule-networks.py
+$ sudo python3 -m visdom.server & python3 capsule_network.py
 ```
 
 ## Benchmarks
@@ -74,7 +75,6 @@ Default PyTorch Adam optimizer hyperparameters were used with no learning rate s
 ## TODO
 
 * Affine transformations for the data augmentation stage.
-* Loss & accuracy charting.
 * Model parameter serialization.
 * Decoder reconstruction plotting.
 
@@ -88,6 +88,6 @@ Major thanks to [@InnerPeace-Wu](https://github.com/InnerPeace-Wu) for a [discus
 
 ## Contact/Support
 
-Gram.AI is currently heavily developing a wide number of AI models to be either open-sourced or released for free the community, and hence cannot guarantee complete support for this work.
+Gram.AI is currently heavily developing a wide number of AI models to be either open-sourced or released for free to the community, hence why we cannot guarantee complete support for this work.
 
 If any issues come up with the usage of this implementation however, or if you would like to contribute in any way, please feel free to send an e-mail to [kenta@gram.ai](kenta@gram.ai) or open a new GitHub issue on this repository.

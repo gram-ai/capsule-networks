@@ -71,7 +71,8 @@ class CapsuleNet(nn.Module):
         self.conv1 = nn.Conv2d(in_channels=1, out_channels=256, kernel_size=9, stride=1)
         self.primary_capsules = CapsuleLayer(num_capsules=8, num_route_nodes=-1, in_channels=256, out_channels=32,
                                              kernel_size=9, stride=2)
-        self.digit_capsules = CapsuleLayer(num_capsules=NUM_CLASSES, num_route_nodes=32 * 6 * 6, in_channels=8, out_channels=16)
+        self.digit_capsules = CapsuleLayer(num_capsules=NUM_CLASSES, num_route_nodes=32 * 6 * 6, in_channels=8,
+                                           out_channels=16)
 
         self.decoder = nn.Sequential(
             nn.Linear(16, 512),
@@ -118,9 +119,11 @@ if __name__ == "__main__":
     from torch.optim import Adam
     from torchnet.engine import Engine
     from torchnet.logger import VisdomPlotLogger, VisdomLogger
+    from torchvision.utils import make_grid
     from torchvision.datasets.mnist import MNIST
     from tqdm import tqdm
     import torchnet as tnt
+    import numpy as np
 
     model = CapsuleNet()
     model.cuda()
@@ -139,6 +142,8 @@ if __name__ == "__main__":
     confusion_logger = VisdomLogger('heatmap', opts={'title': 'Confusion matrix',
                                                      'columnnames': list(range(NUM_CLASSES)),
                                                      'rownames': list(range(NUM_CLASSES))})
+    ground_truth_logger = VisdomLogger('image', opts={'title': 'Ground Truth'})
+    reconstruction_logger = VisdomLogger('image', opts={'title': 'Reconstruction'})
 
     capsule_loss = CapsuleLoss()
 
@@ -190,7 +195,8 @@ if __name__ == "__main__":
 
 
     def on_end_epoch(state):
-        print('[Epoch %d] Training Loss: %.4f (Accuracy: %.2f%%)' % (state['epoch'], meter_loss.value()[0], class_error.value()[0]))
+        print('[Epoch %d] Training Loss: %.4f (Accuracy: %.2f%%)' % (
+            state['epoch'], meter_loss.value()[0], class_error.value()[0]))
 
         train_loss_logger.log(state['epoch'], meter_loss.value()[0])
         train_error_logger.log(state['epoch'], class_error.value()[0])
@@ -201,9 +207,22 @@ if __name__ == "__main__":
         test_error_logger.log(state['epoch'], class_error.value()[0])
         confusion_logger.log(confusion_meter.value())
 
-        print('[Epoch %d] Testing Loss: %.4f (Accuracy: %.2f%%)' % (state['epoch'], meter_loss.value()[0], class_error.value()[0]))
+        print('[Epoch %d] Testing Loss: %.4f (Accuracy: %.2f%%)' % (
+            state['epoch'], meter_loss.value()[0], class_error.value()[0]))
 
         torch.save(model.state_dict(), 'epochs/epoch_%d.pt' % state['epoch'])
+
+        # Reconstruction visualization. For safety, enabled only if there is a batch size >= 16.
+
+        if BATCH_SIZE >= 16:
+            test_sample = next(iter(get_iterator(False)))
+
+            ground_truth = (test_sample[0].unsqueeze(1).float() / 255.0)[:16]
+            _, reconstructions = model(Variable(ground_truth).cuda())
+            reconstruction = reconstructions.cpu().view_as(ground_truth).data
+
+            ground_truth_logger.log(make_grid(ground_truth, nrow=4, normalize=True, range=(0, 1)).numpy())
+            reconstruction_logger.log(make_grid(reconstruction, nrow=4, normalize=True, range=(0, 1)).numpy())
 
 
     engine.hooks['on_sample'] = on_sample

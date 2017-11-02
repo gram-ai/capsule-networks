@@ -133,9 +133,9 @@ if __name__ == "__main__":
     confusion_meter = tnt.meter.ConfusionMeter(NUM_CLASSES, normalized=True)
 
     train_loss_logger = VisdomPlotLogger('line', opts={'title': 'Train Loss'})
-    train_error_logger = VisdomPlotLogger('line', opts={'title': 'Train Class Error'})
+    train_error_logger = VisdomPlotLogger('line', opts={'title': 'Train Accuracy'})
     test_loss_logger = VisdomPlotLogger('line', opts={'title': 'Test Loss'})
-    test_error_logger = VisdomPlotLogger('line', opts={'title': 'Test Class Error'})
+    test_error_logger = VisdomPlotLogger('line', opts={'title': 'Test Accuracy'})
     confusion_logger = VisdomLogger('heatmap', opts={'title': 'Confusion matrix',
                                                      'columnnames': list(range(NUM_CLASSES)),
                                                      'rownames': list(range(NUM_CLASSES))})
@@ -202,6 +202,8 @@ if __name__ == "__main__":
         confusion_logger.log(confusion_meter.value())
 
         print('[Epoch %d] Testing Loss: %.4f (Accuracy: %.2f%%)' % (state['epoch'], meter_loss.value()[0], class_error.value()[0]))
+
+        torch.save(model.state_dict(), 'epochs/epoch_%d.pt' % state['epoch'])
 
 
     engine.hooks['on_sample'] = on_sample

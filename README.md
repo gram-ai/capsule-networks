@@ -68,7 +68,6 @@ Default PyTorch Adam optimizer hyperparameters were used with no learning rate s
 ## TODO
 
 * Affine transformations for the data augmentation stage.
-* Model parameter serialization.
 * Decoder reconstruction plotting.
 
 ## Credits

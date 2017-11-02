@@ -1,2 +1,4 @@
 .idea/
 data/
+epochs/*
+!epochs/.gitkeep

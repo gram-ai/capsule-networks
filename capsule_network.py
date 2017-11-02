@@ -83,7 +83,7 @@ class CapsuleNet(nn.Module):
             nn.Sigmoid()
         )
 
-    def forward(self, x):
+    def forward(self, x, y=None):
         x = F.relu(self.conv1(x), inplace=True)
         x = self.primary_capsules(x)
         x = self.digit_capsules(x).squeeze().transpose(0, 1)
@@ -91,9 +91,17 @@ class CapsuleNet(nn.Module):
         classes = (x ** 2).sum(dim=-1) ** 0.5
         classes = F.softmax(classes)
 
-        # In all batches, get the most active capsule.
-        _, max_length_indices = classes.max(dim=1)
-        reconstructions = self.decoder(x[:, max_length_indices.data[0], :])
+        if y is None:
+            # In all batches, get the most active capsule.
+            _, max_length_indices = classes.max(dim=1)
+        else:
+            # If labels are provided, get the capsule which should have been activated.
+            _, max_length_indices = y.max(dim=1)
+
+        vectors = []
+        for batch, index in enumerate(max_length_indices):
+            vectors.append(x[batch, index.data[0], :])
+        reconstructions = self.decoder(torch.stack(vectors, dim=0))
 
         return classes, reconstructions
 
@@ -117,28 +125,29 @@ class CapsuleLoss(nn.Module):
 if __name__ == "__main__":
     from torch.autograd import Variable
     from torch.optim import Adam
+    from torch.optim.lr_scheduler import ReduceLROnPlateau
     from torchnet.engine import Engine
     from torchnet.logger import VisdomPlotLogger, VisdomLogger
     from torchvision.utils import make_grid
     from torchvision.datasets.mnist import MNIST
     from tqdm import tqdm
     import torchnet as tnt
-    import numpy as np
 
     model = CapsuleNet()
     model.cuda()
 
     optimizer = Adam(model.parameters())
+    scheduler = ReduceLROnPlateau(optimizer, 'max', patience=3)
 
     engine = Engine()
     meter_loss = tnt.meter.AverageValueMeter()
-    class_error = tnt.meter.ClassErrorMeter(accuracy=True)
+    meter_accuracy = tnt.meter.ClassErrorMeter(accuracy=True)
     confusion_meter = tnt.meter.ConfusionMeter(NUM_CLASSES, normalized=True)
 
     train_loss_logger = VisdomPlotLogger('line', opts={'title': 'Train Loss'})
     train_error_logger = VisdomPlotLogger('line', opts={'title': 'Train Accuracy'})
     test_loss_logger = VisdomPlotLogger('line', opts={'title': 'Test Loss'})
-    test_error_logger = VisdomPlotLogger('line', opts={'title': 'Test Accuracy'})
+    test_accuracy_logger = VisdomPlotLogger('line', opts={'title': 'Test Accuracy'})
     confusion_logger = VisdomLogger('heatmap', opts={'title': 'Confusion matrix',
                                                      'columnnames': list(range(NUM_CLASSES)),
                                                      'rownames': list(range(NUM_CLASSES))})
@@ -166,7 +175,7 @@ if __name__ == "__main__":
         data = Variable(data).cuda()
         labels = Variable(labels).cuda()
 
-        classes, reconstructions = model(data)
+        classes, reconstructions = model(data, labels)
 
         loss = capsule_loss(data, labels, classes, reconstructions)
 
@@ -174,7 +183,7 @@ if __name__ == "__main__":
 
 
     def reset_meters():
-        class_error.reset()
+        meter_accuracy.reset()
         meter_loss.reset()
         confusion_meter.reset()
 
@@ -184,7 +193,7 @@ if __name__ == "__main__":
 
 
     def on_forward(state):
-        class_error.add(state['output'].data, torch.LongTensor(state['sample'][1]))
+        meter_accuracy.add(state['output'].data, torch.LongTensor(state['sample'][1]))
         confusion_meter.add(state['output'].data, torch.LongTensor(state['sample'][1]))
         meter_loss.add(state['loss'].data[0])
 
@@ -196,33 +205,37 @@ if __name__ == "__main__":
 
     def on_end_epoch(state):
         print('[Epoch %d] Training Loss: %.4f (Accuracy: %.2f%%)' % (
-            state['epoch'], meter_loss.value()[0], class_error.value()[0]))
+            state['epoch'], meter_loss.value()[0], meter_accuracy.value()[0]))
 
         train_loss_logger.log(state['epoch'], meter_loss.value()[0])
-        train_error_logger.log(state['epoch'], class_error.value()[0])
+        train_error_logger.log(state['epoch'], meter_accuracy.value()[0])
 
         reset_meters()
+
         engine.test(processor, get_iterator(False))
         test_loss_logger.log(state['epoch'], meter_loss.value()[0])
-        test_error_logger.log(state['epoch'], class_error.value()[0])
+        test_accuracy_logger.log(state['epoch'], meter_accuracy.value()[0])
         confusion_logger.log(confusion_meter.value())
 
         print('[Epoch %d] Testing Loss: %.4f (Accuracy: %.2f%%)' % (
-            state['epoch'], meter_loss.value()[0], class_error.value()[0]))
+            state['epoch'], meter_loss.value()[0], meter_accuracy.value()[0]))
+
+        scheduler.step(meter_accuracy.value()[0], state['epoch'])
 
         torch.save(model.state_dict(), 'epochs/epoch_%d.pt' % state['epoch'])
 
-        # Reconstruction visualization. For safety, enabled only if there is a batch size >= 16.
+        # Reconstruction visualization.
 
-        if BATCH_SIZE >= 16:
-            test_sample = next(iter(get_iterator(False)))
+        test_sample = next(iter(get_iterator(False)))
 
-            ground_truth = (test_sample[0].unsqueeze(1).float() / 255.0)[:16]
-            _, reconstructions = model(Variable(ground_truth).cuda())
-            reconstruction = reconstructions.cpu().view_as(ground_truth).data
+        ground_truth = (test_sample[0].unsqueeze(1).float() / 255.0)
+        _, reconstructions = model(Variable(ground_truth).cuda())
+        reconstruction = reconstructions.cpu().view_as(ground_truth).data
 
-            ground_truth_logger.log(make_grid(ground_truth, nrow=4, normalize=True, range=(0, 1)).numpy())
-            reconstruction_logger.log(make_grid(reconstruction, nrow=4, normalize=True, range=(0, 1)).numpy())
+        ground_truth_logger.log(
+            make_grid(ground_truth, nrow=int(BATCH_SIZE ** 0.5), normalize=True, range=(0, 1)).numpy())
+        reconstruction_logger.log(
+            make_grid(reconstruction, nrow=int(BATCH_SIZE ** 0.5), normalize=True, range=(0, 1)).numpy())
 
 
     engine.hooks['on_sample'] = on_sample

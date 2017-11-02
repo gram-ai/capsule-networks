@@ -42,20 +42,13 @@ self.decoder = nn.Sequential(
 )
 ```
 
-**Step 2** Adjust the number of training epochs and and batch sizes inside `capsule_network.py`.
+**Step 2** Adjust the number of training epochs, batch sizes, etc. inside `capsule_network.py`.
 
 ```python
-engine.train(h, get_iterator(True), maxepoch=30, optimizer=optimizer)
-```
-
-```python
-def get_iterator(mode):
-	dataset = MNIST(root='./data', download=True, train=mode)
-	data = getattr(dataset, 'train_data' if mode else 'test_data')
-	labels = getattr(dataset, 'train_labels' if mode else 'test_labels')
-	tensor_dataset = tnt.dataset.TensorDataset([data, labels])
-
-	return tensor_dataset.parallel(batch_size=100, num_workers=4, shuffle=mode)
+BATCH_SIZE = 100
+NUM_CLASSES = 10
+NUM_EPOCHS = 30
+NUM_ROUTING_ITERATIONS = 3
 ```
 
 **Step 3** Start training. The MNIST dataset will be downloaded if you do not already have it in the same directory the script is run in. Make sure to have Visdom Server running!

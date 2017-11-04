@@ -40,9 +40,9 @@ $ sudo python3 -m visdom.server & python3 capsule_network.py
 
 ## Benchmarks
 
-Highest accuracy was 99.39%. It appears that the decoders loss overcomes the margin loss over time. There may be problems with the loss (?), as the graphs from other implementations appears to have a different scale in terms of loss value.
+Highest accuracy was 99.48% after 30 epochs. The model may achieve a higher accuracy as shown by the trend of the test accuracy/loss graphs below.
 
-![Training progress.](media/Visdom.png)
+![Training progress.](media/Benchmark.png)
 
 Default PyTorch Adam optimizer hyperparameters were used with no learning rate scheduling. Epochs with batch size of 100 takes ~3 minutes on a Razer Blade w/ GTX 1050. 
 

@@ -8,6 +8,7 @@ PyTorch implementation by Kenta Iwasaki @ Gram.AI.
 import torch
 import torch.nn.functional as F
 from torch import nn
+import numpy as np
 
 BATCH_SIZE = 100
 NUM_CLASSES = 10
@@ -19,6 +20,20 @@ def softmax(input, dim=1):
     transposed_input = input.transpose(dim, len(input.size()) - 1)
     softmaxed_output = F.softmax(transposed_input.contiguous().view(-1, transposed_input.size(-1)))
     return softmaxed_output.view(*transposed_input.size()).transpose(dim, len(input.size()) - 1)
+
+
+def augmentation(x, max_shift=2):
+    _, _, height, width = x.size()
+
+    h_shift, w_shift = np.random.randint(-max_shift, max_shift + 1, size=2)
+    source_height_slice = slice(max(0, h_shift), h_shift + height)
+    source_width_slice = slice(max(0, w_shift), w_shift + width)
+    target_height_slice = slice(max(0, -h_shift), -h_shift + height)
+    target_width_slice = slice(max(0, -w_shift), -w_shift + width)
+
+    shifted_image = torch.zeros(*x.size())
+    shifted_image[:, :, source_height_slice, source_width_slice] = x[:, :, target_height_slice, target_width_slice]
+    return shifted_image.float()
 
 
 class CapsuleLayer(nn.Module):
@@ -74,7 +89,7 @@ class CapsuleNet(nn.Module):
                                            out_channels=16)
 
         self.decoder = nn.Sequential(
-            nn.Linear(16, 512),
+            nn.Linear(16 * NUM_CLASSES, 512),
             nn.ReLU(inplace=True),
             nn.Linear(512, 1024),
             nn.ReLU(inplace=True),
@@ -93,14 +108,9 @@ class CapsuleNet(nn.Module):
         if y is None:
             # In all batches, get the most active capsule.
             _, max_length_indices = classes.max(dim=1)
-        else:
-            # If labels are provided, get the capsule which should have been activated.
-            _, max_length_indices = y.max(dim=1)
+            y = Variable(torch.sparse.torch.eye(NUM_CLASSES)).cuda().index_select(dim=0, index=max_length_indices.data)
 
-        vectors = []
-        for batch, index in enumerate(max_length_indices):
-            vectors.append(x[batch, index.data[0], :])
-        reconstructions = self.decoder(torch.stack(vectors, dim=0))
+        reconstructions = self.decoder((x * y[:, :, None]).view(x.size(0), -1))
 
         return classes, reconstructions
 
@@ -108,18 +118,18 @@ class CapsuleNet(nn.Module):
 class CapsuleLoss(nn.Module):
     def __init__(self):
         super(CapsuleLoss, self).__init__()
-        self.reconstruction_loss = nn.MSELoss(size_average=True)
+        self.reconstruction_loss = nn.MSELoss(size_average=False)
 
     def forward(self, images, labels, classes, reconstructions):
-        left = torch.clamp(0.9 - classes, min=0) ** 2
-        right = torch.clamp(classes - 0.1, min=0) ** 2
+        left = F.relu(0.9 - classes, inplace=True) ** 2
+        right = F.relu(classes - 0.1, inplace=True) ** 2
 
-        margin_loss = labels * left + 0.5 * (1 - labels) * right
-        margin_loss = margin_loss.sum(dim=1).mean()
+        margin_loss = labels * left + 0.5 * (1. - labels) * right
+        margin_loss = margin_loss.sum()
 
         reconstruction_loss = self.reconstruction_loss(reconstructions, images)
 
-        return margin_loss + 0.0005 * reconstruction_loss
+        return (margin_loss + 0.0005 * reconstruction_loss) / images.size(0)
 
 
 if __name__ == "__main__":
@@ -134,6 +144,8 @@ if __name__ == "__main__":
 
     model = CapsuleNet()
     model.cuda()
+
+    print("# parameters:", sum(param.numel() for param in model.parameters()))
 
     optimizer = Adam(model.parameters())
 
@@ -165,15 +177,20 @@ if __name__ == "__main__":
 
 
     def processor(sample):
-        data = sample[0].unsqueeze(1).float() / 255.0
-        labels = torch.LongTensor(sample[1])
+        data, labels, training = sample
+
+        data = augmentation(data.unsqueeze(1).float() / 255.0)
+        labels = torch.LongTensor(labels)
 
         labels = torch.sparse.torch.eye(NUM_CLASSES).index_select(dim=0, index=labels)
 
         data = Variable(data).cuda()
         labels = Variable(labels).cuda()
 
-        classes, reconstructions = model(data, labels)
+        if training:
+            classes, reconstructions = model(data, labels)
+        else:
+            classes, reconstructions = model(data)
 
         loss = capsule_loss(data, labels, classes, reconstructions)
 

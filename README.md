@@ -48,7 +48,7 @@ Default PyTorch Adam optimizer hyperparameters were used with no learning rate s
 
 ## TODO
 
-* Affine transformations for the data augmentation stage.
+* Extension to other datasets apart from MNIST.
 
 ## Credits
 
@@ -56,7 +56,7 @@ Primarily referenced these two TensorFlow and Keras implementations:
 1. [Keras implementation by @XifengGuo](https://github.com/XifengGuo/CapsNet-Keras)
 2. [TensorFlow implementation by @naturomics](https://github.com/naturomics/CapsNet-Tensorflow)
 
-Major thanks to [@InnerPeace-Wu](https://github.com/InnerPeace-Wu) for a [discussion on the dynamic routing procedure](https://github.com/XifengGuo/CapsNet-Keras/issues/1) outlined in the paper.
+Many thanks to [@InnerPeace-Wu](https://github.com/InnerPeace-Wu) for a [discussion on the dynamic routing procedure](https://github.com/XifengGuo/CapsNet-Keras/issues/1) outlined in the paper.
 
 ## Contact/Support
 

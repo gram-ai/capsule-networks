@@ -10,8 +10,6 @@ Training for the model is done using [TorchNet](https://github.com/pytorch/tnt),
 
 Paper written by Sara Sabour, Nicholas Frosst, and Geoffrey E. Hinton. For more information, please check out the paper [here](https://arxiv.org/abs/1710.09829).
 
-__Note__: Affine-transformations for the data augmentation stage have not been implemented yet. This implementation only provides an efficient implementation for the dynamic routing procedure, example CapsNet architecture, and squashing functions mentioned in the paper.
-
 ## Requirements
 
 * Python 3
@@ -62,4 +60,4 @@ Many thanks to [@InnerPeace-Wu](https://github.com/InnerPeace-Wu) for a [discuss
 
 Gram.AI is currently heavily developing a wide number of AI models to be either open-sourced or released for free to the community, hence why we cannot guarantee complete support for this work.
 
-If any issues come up with the usage of this implementation however, or if you would like to contribute in any way, please feel free to send an e-mail to [kenta@gram.ai](kenta@gram.ai) or open a new GitHub issue on this repository.
+If any issues come up with the usage of this implementation however, or if you would like to contribute in any way, please feel free to send an e-mail to [iwasaki.kenta@velcron.io](iwasaki.kenta@velcron.io) or open a new GitHub issue on this repository.

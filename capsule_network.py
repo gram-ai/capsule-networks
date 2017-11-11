@@ -143,7 +143,7 @@ if __name__ == "__main__":
     import torchnet as tnt
 
     model = CapsuleNet()
-    model.load_state_dict(torch.load('epochs/epoch_327.pt'))
+    # model.load_state_dict(torch.load('epochs/epoch_327.pt'))
     model.cuda()
 
     print("# parameters:", sum(param.numel() for param in model.parameters()))
@@ -251,10 +251,10 @@ if __name__ == "__main__":
         reconstruction_logger.log(
             make_grid(reconstruction, nrow=int(BATCH_SIZE ** 0.5), normalize=True, range=(0, 1)).numpy())
 
-    def on_start(state):
-        state['epoch'] = 327
-
-    engine.hooks['on_start'] = on_start
+    # def on_start(state):
+    #     state['epoch'] = 327
+    #
+    # engine.hooks['on_start'] = on_start
     engine.hooks['on_sample'] = on_sample
     engine.hooks['on_forward'] = on_forward
     engine.hooks['on_start_epoch'] = on_start_epoch

@@ -38,7 +38,7 @@ $ sudo python3 -m visdom.server & python3 capsule_network.py
 
 ## Benchmarks
 
-Highest accuracy was 99.48% after 30 epochs. The model may achieve a higher accuracy as shown by the trend of the test accuracy/loss graphs below.
+Highest accuracy was 99.7% on the 443rd epoch. The model may achieve a higher accuracy as shown by the trend of the test accuracy/loss graphs below.
 
 ![Training progress.](media/Benchmark.png)
 

@@ -42,7 +42,8 @@ Highest accuracy was 99.7% on the 443rd epoch. The model may achieve a higher ac
 
 ![Training progress.](media/Benchmark.png)
 
-Default PyTorch Adam optimizer hyperparameters were used with no learning rate scheduling. Epochs with batch size of 100 takes ~3 minutes on a Razer Blade w/ GTX 1050. 
+Default PyTorch Adam optimizer hyperparameters were used with no learning rate scheduling. 
+Epochs with batch size of 100 takes ~3 minutes on a Razer Blade w/ GTX 1050 and ~2 minutes on a NVIDIA Titan XP
 
 ## TODO
 

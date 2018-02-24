@@ -20,7 +20,7 @@ NUM_ROUTING_ITERATIONS = 3
 
 def softmax(input, dim=1):
     transposed_input = input.transpose(dim, len(input.size()) - 1)
-    softmaxed_output = F.softmax(transposed_input.contiguous().view(-1, transposed_input.size(-1)))
+    softmaxed_output = F.softmax(transposed_input.contiguous().view(-1, transposed_input.size(-1)), dim=-1)
     return softmaxed_output.view(*transposed_input.size()).transpose(dim, len(input.size()) - 1)
 
 
@@ -105,7 +105,7 @@ class CapsuleNet(nn.Module):
         x = self.digit_capsules(x).squeeze().transpose(0, 1)
 
         classes = (x ** 2).sum(dim=-1) ** 0.5
-        classes = F.softmax(classes)
+        classes = F.softmax(classes, dim=-1)
 
         if y is None:
             # In all batches, get the most active capsule.
@@ -129,6 +129,8 @@ class CapsuleLoss(nn.Module):
         margin_loss = labels * left + 0.5 * (1. - labels) * right
         margin_loss = margin_loss.sum()
 
+        assert torch.numel(images) == torch.numel(reconstructions)
+        images = images.view(reconstructions.size()[0], -1)
         reconstruction_loss = self.reconstruction_loss(reconstructions, images)
 
         return (margin_loss + 0.0005 * reconstruction_loss) / images.size(0)

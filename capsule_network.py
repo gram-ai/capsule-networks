@@ -5,6 +5,7 @@ https://arxiv.org/abs/1710.09829
 PyTorch implementation by Kenta Iwasaki @ Gram.AI.
 """
 import sys
+
 sys.setrecursionlimit(15000)
 
 import torch
@@ -20,8 +21,11 @@ NUM_ROUTING_ITERATIONS = 3
 
 def softmax(input, dim=1):
     transposed_input = input.transpose(dim, len(input.size()) - 1)
-    softmaxed_output = F.softmax(transposed_input.contiguous().view(-1, transposed_input.size(-1)), dim=-1)
-    return softmaxed_output.view(*transposed_input.size()).transpose(dim, len(input.size()) - 1)
+    softmaxed_output = F.softmax(
+        transposed_input.contiguous().view(-1, transposed_input.size(-1)),
+        dim=-1)
+    return softmaxed_output.view(*transposed_input.size()).transpose(dim, len(
+        input.size()) - 1)
 
 
 def augmentation(x, max_shift=2):
@@ -34,12 +38,15 @@ def augmentation(x, max_shift=2):
     target_width_slice = slice(max(0, -w_shift), -w_shift + width)
 
     shifted_image = torch.zeros(*x.size())
-    shifted_image[:, :, source_height_slice, source_width_slice] = x[:, :, target_height_slice, target_width_slice]
+    shifted_image[:, :, source_height_slice,
+                  source_width_slice] = x[:, :, target_height_slice,
+                                          target_width_slice]
     return shifted_image.float()
 
 
 class CapsuleLayer(nn.Module):
-    def __init__(self, num_capsules, num_route_nodes, in_channels, out_channels, kernel_size=None, stride=None,
+    def __init__(self, num_capsules, num_route_nodes, in_channels,
+                 out_channels, kernel_size=None, stride=None,
                  num_iterations=NUM_ROUTING_ITERATIONS):
         super(CapsuleLayer, self).__init__()
 
@@ -49,10 +56,13 @@ class CapsuleLayer(nn.Module):
         self.num_capsules = num_capsules
 
         if num_route_nodes != -1:
-            self.route_weights = nn.Parameter(torch.randn(num_capsules, num_route_nodes, in_channels, out_channels))
+            self.route_weights = nn.Parameter(
+                torch.randn(num_capsules, num_route_nodes, in_channels,
+                            out_channels))
         else:
             self.capsules = nn.ModuleList(
-                [nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size, stride=stride, padding=0) for _ in
+                [nn.Conv2d(in_channels, out_channels, kernel_size=kernel_size,
+                           stride=stride, padding=0) for _ in
                  range(num_capsules)])
 
     def squash(self, tensor, dim=-1):
@@ -62,18 +72,21 @@ class CapsuleLayer(nn.Module):
 
     def forward(self, x):
         if self.num_route_nodes != -1:
-            priors = x[None, :, :, None, :] @ self.route_weights[:, None, :, :, :]
+            priors = x[None, :, :, None, :] @ self.route_weights[:, None, :, :,
+                                              :]
 
             logits = Variable(torch.zeros(*priors.size())).cuda()
             for i in range(self.num_iterations):
                 probs = softmax(logits, dim=2)
-                outputs = self.squash((probs * priors).sum(dim=2, keepdim=True))
+                outputs = self.squash(
+                    (probs * priors).sum(dim=2, keepdim=True))
 
                 if i != self.num_iterations - 1:
                     delta_logits = (priors * outputs).sum(dim=-1, keepdim=True)
                     logits = logits + delta_logits
         else:
-            outputs = [capsule(x).view(x.size(0), -1, 1) for capsule in self.capsules]
+            outputs = [capsule(x).view(x.size(0), -1, 1) for capsule in
+                       self.capsules]
             outputs = torch.cat(outputs, dim=-1)
             outputs = self.squash(outputs)
 
@@ -84,10 +97,15 @@ class CapsuleNet(nn.Module):
     def __init__(self):
         super(CapsuleNet, self).__init__()
 
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=256, kernel_size=9, stride=1)
-        self.primary_capsules = CapsuleLayer(num_capsules=8, num_route_nodes=-1, in_channels=256, out_channels=32,
+        self.conv1 = nn.Conv2d(in_channels=1, out_channels=256, kernel_size=9,
+                               stride=1)
+        self.primary_capsules = CapsuleLayer(num_capsules=8,
+                                             num_route_nodes=-1,
+                                             in_channels=256, out_channels=32,
                                              kernel_size=9, stride=2)
-        self.digit_capsules = CapsuleLayer(num_capsules=NUM_CLASSES, num_route_nodes=32 * 6 * 6, in_channels=8,
+        self.digit_capsules = CapsuleLayer(num_capsules=NUM_CLASSES,
+                                           num_route_nodes=32 * 6 * 6,
+                                           in_channels=8,
                                            out_channels=16)
 
         self.decoder = nn.Sequential(
@@ -110,7 +128,9 @@ class CapsuleNet(nn.Module):
         if y is None:
             # In all batches, get the most active capsule.
             _, max_length_indices = classes.max(dim=1)
-            y = Variable(torch.sparse.torch.eye(NUM_CLASSES)).cuda().index_select(dim=0, index=max_length_indices.data)
+            y = Variable(torch.eye(NUM_CLASSES)).cuda().index_select(
+                dim=0,
+                index=max_length_indices.data)
 
         reconstructions = self.decoder((x * y[:, :, None]).view(x.size(0), -1))
 
@@ -160,14 +180,20 @@ if __name__ == "__main__":
     confusion_meter = tnt.meter.ConfusionMeter(NUM_CLASSES, normalized=True)
 
     train_loss_logger = VisdomPlotLogger('line', opts={'title': 'Train Loss'})
-    train_error_logger = VisdomPlotLogger('line', opts={'title': 'Train Accuracy'})
+    train_error_logger = VisdomPlotLogger('line',
+                                          opts={'title': 'Train Accuracy'})
     test_loss_logger = VisdomPlotLogger('line', opts={'title': 'Test Loss'})
-    test_accuracy_logger = VisdomPlotLogger('line', opts={'title': 'Test Accuracy'})
-    confusion_logger = VisdomLogger('heatmap', opts={'title': 'Confusion matrix',
-                                                     'columnnames': list(range(NUM_CLASSES)),
-                                                     'rownames': list(range(NUM_CLASSES))})
+    test_accuracy_logger = VisdomPlotLogger('line',
+                                            opts={'title': 'Test Accuracy'})
+    confusion_logger = VisdomLogger('heatmap',
+                                    opts={'title': 'Confusion matrix',
+                                          'columnnames': list(
+                                              range(NUM_CLASSES)),
+                                          'rownames': list(
+                                              range(NUM_CLASSES))})
     ground_truth_logger = VisdomLogger('image', opts={'title': 'Ground Truth'})
-    reconstruction_logger = VisdomLogger('image', opts={'title': 'Reconstruction'})
+    reconstruction_logger = VisdomLogger('image',
+                                         opts={'title': 'Reconstruction'})
 
     capsule_loss = CapsuleLoss()
 
@@ -178,7 +204,8 @@ if __name__ == "__main__":
         labels = getattr(dataset, 'train_labels' if mode else 'test_labels')
         tensor_dataset = tnt.dataset.TensorDataset([data, labels])
 
-        return tensor_dataset.parallel(batch_size=BATCH_SIZE, num_workers=4, shuffle=mode)
+        return tensor_dataset.parallel(batch_size=BATCH_SIZE, num_workers=4,
+                                       shuffle=mode)
 
 
     def processor(sample):
@@ -187,7 +214,7 @@ if __name__ == "__main__":
         data = augmentation(data.unsqueeze(1).float() / 255.0)
         labels = torch.LongTensor(labels)
 
-        labels = torch.sparse.torch.eye(NUM_CLASSES).index_select(dim=0, index=labels)
+        labels = torch.eye(NUM_CLASSES).index_select(dim=0, index=labels)
 
         data = Variable(data).cuda()
         labels = Variable(labels).cuda()
@@ -213,8 +240,10 @@ if __name__ == "__main__":
 
 
     def on_forward(state):
-        meter_accuracy.add(state['output'].data, torch.LongTensor(state['sample'][1]))
-        confusion_meter.add(state['output'].data, torch.LongTensor(state['sample'][1]))
+        meter_accuracy.add(state['output'].data,
+                           torch.LongTensor(state['sample'][1]))
+        confusion_meter.add(state['output'].data,
+                            torch.LongTensor(state['sample'][1]))
         meter_loss.add(state['loss'].data[0])
 
 
@@ -251,9 +280,12 @@ if __name__ == "__main__":
         reconstruction = reconstructions.cpu().view_as(ground_truth).data
 
         ground_truth_logger.log(
-            make_grid(ground_truth, nrow=int(BATCH_SIZE ** 0.5), normalize=True, range=(0, 1)).numpy())
+            make_grid(ground_truth, nrow=int(BATCH_SIZE ** 0.5),
+                      normalize=True, range=(0, 1)).numpy())
         reconstruction_logger.log(
-            make_grid(reconstruction, nrow=int(BATCH_SIZE ** 0.5), normalize=True, range=(0, 1)).numpy())
+            make_grid(reconstruction, nrow=int(BATCH_SIZE ** 0.5),
+                      normalize=True, range=(0, 1)).numpy())
+
 
     # def on_start(state):
     #     state['epoch'] = 327
@@ -264,4 +296,5 @@ if __name__ == "__main__":
     engine.hooks['on_start_epoch'] = on_start_epoch
     engine.hooks['on_end_epoch'] = on_end_epoch
 
-    engine.train(processor, get_iterator(True), maxepoch=NUM_EPOCHS, optimizer=optimizer)
+    engine.train(processor, get_iterator(True), maxepoch=NUM_EPOCHS,
+                 optimizer=optimizer)

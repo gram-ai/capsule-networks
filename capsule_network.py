@@ -110,7 +110,7 @@ class CapsuleNet(nn.Module):
         if y is None:
             # In all batches, get the most active capsule.
             _, max_length_indices = classes.max(dim=1)
-            y = Variable(torch.sparse.torch.eye(NUM_CLASSES)).cuda().index_select(dim=0, index=max_length_indices.data)
+            y = Variable(torch.eye(NUM_CLASSES)).cuda().index_select(dim=0, index=max_length_indices.data)
 
         reconstructions = self.decoder((x * y[:, :, None]).view(x.size(0), -1))
 
@@ -187,7 +187,7 @@ if __name__ == "__main__":
         data = augmentation(data.unsqueeze(1).float() / 255.0)
         labels = torch.LongTensor(labels)
 
-        labels = torch.sparse.torch.eye(NUM_CLASSES).index_select(dim=0, index=labels)
+        labels = torch.eye(NUM_CLASSES).index_select(dim=0, index=labels)
 
         data = Variable(data).cuda()
         labels = Variable(labels).cuda()
@@ -215,7 +215,7 @@ if __name__ == "__main__":
     def on_forward(state):
         meter_accuracy.add(state['output'].data, torch.LongTensor(state['sample'][1]))
         confusion_meter.add(state['output'].data, torch.LongTensor(state['sample'][1]))
-        meter_loss.add(state['loss'].data[0])
+        meter_loss.add(state['loss'].item())
 
 
     def on_start_epoch(state):

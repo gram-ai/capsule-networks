@@ -34,7 +34,7 @@ def augmentation(x, max_shift=2):
     target_width_slice = slice(max(0, -w_shift), -w_shift + width)
 
     shifted_image = torch.zeros(*x.size())
-    shifted_image[:, :, source_height_slice, source_width_slice] = x[:, :, target_height_slice, target_width_slice]
+    shifted_image[ :, :, source_height_slice, source_width_slice] = x[:, :, target_height_slice, target_width_slice]
     return shifted_image.float()
 
 
@@ -84,10 +84,10 @@ class CapsuleNet(nn.Module):
     def __init__(self):
         super(CapsuleNet, self).__init__()
 
-        self.conv1 = nn.Conv2d(in_channels=1, out_channels=256, kernel_size=9, stride=1)
+        self.conv1 = nn.Conv2d(in_channels=3, out_channels=256, kernel_size=9, stride=1)
         self.primary_capsules = CapsuleLayer(num_capsules=8, num_route_nodes=-1, in_channels=256, out_channels=32,
                                              kernel_size=9, stride=2)
-        self.digit_capsules = CapsuleLayer(num_capsules=NUM_CLASSES, num_route_nodes=32 * 6 * 6, in_channels=8,
+        self.digit_capsules = CapsuleLayer(num_capsules=NUM_CLASSES, num_route_nodes=2048, in_channels=8,
                                            out_channels=16)
 
         self.decoder = nn.Sequential(
@@ -95,7 +95,7 @@ class CapsuleNet(nn.Module):
             nn.ReLU(inplace=True),
             nn.Linear(512, 1024),
             nn.ReLU(inplace=True),
-            nn.Linear(1024, 784),
+            nn.Linear(1024, 3072),
             nn.Sigmoid()
         )
 
@@ -142,7 +142,7 @@ if __name__ == "__main__":
     from torchnet.engine import Engine
     from torchnet.logger import VisdomPlotLogger, VisdomLogger
     from torchvision.utils import make_grid
-    from torchvision.datasets.mnist import MNIST
+    from torchvision.datasets.svhn import SVHN
     from tqdm import tqdm
     import torchnet as tnt
 
@@ -173,9 +173,13 @@ if __name__ == "__main__":
 
 
     def get_iterator(mode):
-        dataset = MNIST(root='./data', download=True, train=mode)
-        data = getattr(dataset, 'train_data' if mode else 'test_data')
-        labels = getattr(dataset, 'train_labels' if mode else 'test_labels')
+        if mode is True:
+            dataset = SVHN(root='./data', download=True, split="train")
+        elif mode is False:
+            dataset = SVHN(root='./data', download=True, split="test")
+        data = dataset.data
+        labels = dataset.labels
+
         tensor_dataset = tnt.dataset.TensorDataset([data, labels])
 
         return tensor_dataset.parallel(batch_size=BATCH_SIZE, num_workers=4, shuffle=mode)
@@ -184,7 +188,7 @@ if __name__ == "__main__":
     def processor(sample):
         data, labels, training = sample
 
-        data = augmentation(data.unsqueeze(1).float() / 255.0)
+        data = augmentation(data)
         labels = torch.LongTensor(labels)
 
         labels = torch.eye(NUM_CLASSES).index_select(dim=0, index=labels)
@@ -246,7 +250,7 @@ if __name__ == "__main__":
 
         test_sample = next(iter(get_iterator(False)))
 
-        ground_truth = (test_sample[0].unsqueeze(1).float() / 255.0)
+        ground_truth = (test_sample[0])
         _, reconstructions = model(Variable(ground_truth).cuda())
         reconstruction = reconstructions.cpu().view_as(ground_truth).data
 
